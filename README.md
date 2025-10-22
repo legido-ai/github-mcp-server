@@ -124,8 +124,17 @@ GitHub Enterprise Server does not support remote server hosting. Please refer to
 
 1. To run the server in a container, you will need to have [Docker](https://www.docker.com/) installed.
 2. Once Docker is installed, you will also need to ensure Docker is running. The image is public; if you get errors on pull, you may have an expired token and need to `docker logout ghcr.io`.
-3. Lastly you will need to [Create a GitHub Personal Access Token](https://github.com/settings/personal-access-tokens/new).
-The MCP server can use many of the GitHub APIs, so enable the permissions that you feel comfortable granting your AI tools (to learn more about access tokens, please check out the [documentation](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)).
+3. You have two options for authentication:
+
+   **Option A: Personal Access Token (PAT)**
+   [Create a GitHub Personal Access Token](https://github.com/settings/personal-access-tokens/new).
+   The MCP server can use many of the GitHub APIs, so enable the permissions that you feel comfortable granting your AI tools (to learn more about access tokens, please check out the [documentation](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)).
+
+   **Option B: GitHub App Authentication (Recommended)**
+   Create a GitHub App and install it on the repositories you want to access. You'll need:
+   - `GITHUB_APP_ID`: The GitHub App ID
+   - `GITHUB_PRIVATE_KEY`: The GitHub App private key (PEM format)
+   - `GITHUB_INSTALLATION_ID`: The installation ID of the GitHub App on your organization/account
 
 <details><summary><b>Handling PATs Securely</b></summary>
 
@@ -202,6 +211,42 @@ the hostname for GitHub Enterprise Server or GitHub Enterprise Cloud with data r
     }
 }
 ```
+
+### GitHub App Authentication
+
+Instead of using a Personal Access Token (PAT), you can authenticate using a GitHub App. This approach provides better security as it generates short-lived tokens that automatically expire.
+
+To use GitHub App authentication, you need to provide these environment variables:
+
+- `GITHUB_APP_ID`: The GitHub App ID
+- `GITHUB_PRIVATE_KEY`: The GitHub App private key (PEM format)
+- `GITHUB_INSTALLATION_ID`: The installation ID of the GitHub App on your organization/account
+
+When using GitHub App authentication, the server will automatically generate and refresh installation tokens as needed.
+
+Example Docker configuration with GitHub App:
+```json
+{
+  "github": {
+    "command": "docker",
+    "args": [
+      "run",
+      "-i",
+      "--rm",
+      "-e", "GITHUB_APP_ID",
+      "-e", "GITHUB_PRIVATE_KEY", 
+      "-e", "GITHUB_INSTALLATION_ID"
+    ],
+    "env": {
+      "GITHUB_APP_ID": "${input:github_app_id}",
+      "GITHUB_PRIVATE_KEY": "${input:github_private_key}",
+      "GITHUB_INSTALLATION_ID": "${input:github_installation_id}"
+    }
+  }
+}
+```
+
+Note: When GitHub App authentication is configured, the `GITHUB_PERSONAL_ACCESS_TOKEN` environment variable is not required.
 
 ## Installation
 
@@ -300,8 +345,9 @@ For a complete overview of all installation options, see our **[Installation Gui
 ### Build from source
 
 If you don't have Docker, you can use `go build` to build the binary in the
-`cmd/github-mcp-server` directory, and use the `github-mcp-server stdio` command with the `GITHUB_PERSONAL_ACCESS_TOKEN` environment variable set to your token. To specify the output location of the build, use the `-o` flag. You should configure your server to use the built executable as its `command`. For example:
+`cmd/github-mcp-server` directory, and use the `github-mcp-server stdio` command. You can authenticate either with a Personal Access Token or with GitHub App credentials. To specify the output location of the build, use the `-o` flag. You should configure your server to use the built executable as its `command`. For example:
 
+**Using Personal Access Token:**
 ```JSON
 {
   "mcp": {
@@ -311,6 +357,25 @@ If you don't have Docker, you can use `go build` to build the binary in the
         "args": ["stdio"],
         "env": {
           "GITHUB_PERSONAL_ACCESS_TOKEN": "<YOUR_TOKEN>"
+        }
+      }
+    }
+  }
+}
+```
+
+**Using GitHub App Authentication:**
+```JSON
+{
+  "mcp": {
+    "servers": {
+      "github": {
+        "command": "/path/to/github-mcp-server",
+        "args": ["stdio"],
+        "env": {
+          "GITHUB_APP_ID": "<YOUR_APP_ID>",
+          "GITHUB_PRIVATE_KEY": "<YOUR_PRIVATE_KEY>",
+          "GITHUB_INSTALLATION_ID": "<YOUR_INSTALLATION_ID>"
         }
       }
     }

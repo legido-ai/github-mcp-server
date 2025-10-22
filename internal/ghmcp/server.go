@@ -16,6 +16,7 @@ import (
 
 	"github.com/github/github-mcp-server/pkg/errors"
 	"github.com/github/github-mcp-server/pkg/github"
+	"github.com/github/github-mcp-server/pkg/githubapp"
 	mcplog "github.com/github/github-mcp-server/pkg/log"
 	"github.com/github/github-mcp-server/pkg/raw"
 	"github.com/github/github-mcp-server/pkg/translations"
@@ -56,27 +57,56 @@ type MCPServerConfig struct {
 const stdioServerLogPrefix = "stdioserver"
 
 func NewMCPServer(cfg MCPServerConfig) (*server.MCPServer, error) {
-	apiHost, err := parseAPIHost(cfg.Host)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse API host: %w", err)
+	// Check if GitHub App authentication is configured
+	appID := os.Getenv("GITHUB_APP_ID")
+	privateKey := os.Getenv("GITHUB_PRIVATE_KEY")
+	installationID := os.Getenv("GITHUB_INSTALLATION_ID")
+
+	var restClient *gogithub.Client
+	var gqlClient *githubv4.Client
+
+	if appID != "" && privateKey != "" && installationID != "" {
+		// Use GitHub App authentication
+		auth, err := githubapp.NewAppAuth(cfg.Host)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize GitHub App authentication: %w", err)
+		}
+
+		// Get REST client with GitHub App authentication
+		restClient, err = auth.GetRESTClient(cfg.Version)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create REST client with GitHub App authentication: %w", err)
+		}
+
+		// Get GraphQL client with GitHub App authentication
+		gqlClient, err = auth.GetGraphQLClient(cfg.Version)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create GraphQL client with GitHub App authentication: %w", err)
+		}
+	} else {
+		// Use traditional PAT authentication
+		apiHost, err := parseAPIHost(cfg.Host)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse API host: %w", err)
+		}
+
+		// Construct our REST client
+		restClient = gogithub.NewClient(nil).WithAuthToken(cfg.Token)
+		restClient.UserAgent = fmt.Sprintf("github-mcp-server/%s", cfg.Version)
+		restClient.BaseURL = apiHost.baseRESTURL
+		restClient.UploadURL = apiHost.uploadURL
+
+		// Construct our GraphQL client
+		// We're using NewEnterpriseClient here unconditionally as opposed to NewClient because we already
+		// did the necessary API host parsing so that github.com will return the correct URL anyway.
+		gqlHTTPClient := &http.Client{
+			Transport: &bearerAuthTransport{
+				transport: http.DefaultTransport,
+				token:     cfg.Token,
+			},
+		} // We're going to wrap the Transport later in beforeInit
+		gqlClient = githubv4.NewEnterpriseClient(apiHost.graphqlURL.String(), gqlHTTPClient)
 	}
-
-	// Construct our REST client
-	restClient := gogithub.NewClient(nil).WithAuthToken(cfg.Token)
-	restClient.UserAgent = fmt.Sprintf("github-mcp-server/%s", cfg.Version)
-	restClient.BaseURL = apiHost.baseRESTURL
-	restClient.UploadURL = apiHost.uploadURL
-
-	// Construct our GraphQL client
-	// We're using NewEnterpriseClient here unconditionally as opposed to NewClient because we already
-	// did the necessary API host parsing so that github.com will return the correct URL anyway.
-	gqlHTTPClient := &http.Client{
-		Transport: &bearerAuthTransport{
-			transport: http.DefaultTransport,
-			token:     cfg.Token,
-		},
-	} // We're going to wrap the Transport later in beforeInit
-	gqlClient := githubv4.NewEnterpriseClient(apiHost.graphqlURL.String(), gqlHTTPClient)
 
 	// When a client send an initialize request, update the user agent to include the client info.
 	beforeInit := func(_ context.Context, _ any, message *mcp.InitializeRequest) {

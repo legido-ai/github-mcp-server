@@ -8,6 +8,7 @@ import (
 
 	"github.com/github/github-mcp-server/internal/ghmcp"
 	"github.com/github/github-mcp-server/pkg/github"
+	"github.com/github/github-mcp-server/pkg/githubapp"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -31,10 +32,21 @@ var (
 		Short: "Start stdio server",
 		Long:  `Start a server that communicates via standard input/output streams using JSON-RPC messages.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			token := viper.GetString("personal_access_token")
-			if token == "" {
-				return errors.New("GITHUB_PERSONAL_ACCESS_TOKEN not set")
+			// Check if GitHub App authentication is configured
+			appID := os.Getenv("GITHUB_APP_ID")
+			privateKey := os.Getenv("GITHUB_PRIVATE_KEY")
+			installationID := os.Getenv("GITHUB_INSTALLATION_ID")
+
+			var token string
+			if appID == "" || privateKey == "" || installationID == "" {
+				// If GitHub App auth is not configured, use PAT
+				token = viper.GetString("personal_access_token")
+				if token == "" {
+					return errors.New("either GITHUB_PERSONAL_ACCESS_TOKEN or all of GITHUB_APP_ID, GITHUB_PRIVATE_KEY, and GITHUB_INSTALLATION_ID must be set")
+				}
 			}
+			// If GitHub App auth is configured, token will be empty here,
+			// but the server will handle GitHub App authentication internally
 
 			// If you're wondering why we're not using viper.GetStringSlice("toolsets"),
 			// it's because viper doesn't handle comma-separated values correctly for env
@@ -53,7 +65,7 @@ var (
 			stdioServerConfig := ghmcp.StdioServerConfig{
 				Version:              version,
 				Host:                 viper.GetString("host"),
-				Token:                token,
+				Token:                token, // This will be empty if using GitHub App auth, which is handled in the server
 				EnabledToolsets:      enabledToolsets,
 				DynamicToolsets:      viper.GetBool("dynamic_toolsets"),
 				ReadOnly:             viper.GetBool("read-only"),
