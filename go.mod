@@ -5,7 +5,7 @@ go 1.23.7
 require (
 	github.com/google/go-github/v74 v74.0.0
 	github.com/josephburnett/jd v1.9.2
-	github.com/mark3labs/mcp-go v0.36.0
+	github.com/mark3labs/mcp-go v0.42.0
 	github.com/migueleliasweb/go-github-mock v1.3.0
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.20.1
@@ -48,7 +48,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/oauth2 v0.29.0 // indirect
+	golang.org/x/oauth2 v0.29.0
 	golang.org/x/sys v0.31.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
